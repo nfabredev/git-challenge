@@ -2,9 +2,6 @@ use std::env;
 use std::fs;
 
 fn main() {
-    // println!("Your code goes here!");
-
-    Uncomment this block to pass the first stage
     let args: Vec<String> = env::args().collect();
     if args[1] == "init" {
         fs::create_dir(".git").unwrap();
