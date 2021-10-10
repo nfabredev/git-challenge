@@ -1,8 +1,11 @@
 use flate2::read::ZlibDecoder;
+use flate2::read::ZlibEncoder;
 use flate2::Compression;
 use std::env;
 use std::fs;
+use std::io;
 use std::io::Read;
+use std::io::Write;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -43,35 +46,42 @@ fn cat_file(blob_sha: &String) {
     let mut buffer = String::new();
     content.read_to_string(&mut buffer).unwrap();
     // git ojects have a header separated by a NULL codepoint
+    // https://git-scm.com/book/en/v2/Git-Internals-Git-Objects#_object_storage
     let null_ascii_codepoint = '\x00';
     // that we discard
-    let result: Vec<&str> = buffer.split(null_ascii_codepoint).collect()[1];
+    let result = buffer.split(null_ascii_codepoint).collect::<Vec<&str>>()[1];
     print!("{}", result);
 }
 
 fn hash_object(file_name: &String) {
-    let original = File::open(file_name).expect("Unable to open");
-    let mut original_reader = BufReader::new(original);
+    let original = fs::File::open(file_name).expect("Unable to open");
+    let mut original_reader = io::BufReader::new(original);
 
     let data = encode_file(&mut original_reader).expect("Failed to encode file");
 
-    let encoded = OpenOptions::new()
+    let header = "blob \x00".as_bytes().to_vec();
+
+    // FIXME: does this really prepends the header to the data ?
+    let object: Vec<u8> = data.into_iter().chain(header.into_iter()).collect();
+
+    let encoded = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
-        .open("1234567890"); // TODO compute hash name
+        .open("1234567890")  // TODO compute hash name
+        .expect("Failed to write file");
 
-    let mut encoded_writer = BufWriter::new(encoded);
+    let mut encoded_writer = io::BufWriter::new(encoded);
     encoded_writer
-        .write_all(&data)
+        .write_all(&object)
         .expect("Failed to write encoded file");
 }
 
-fn encode_file(file: &mut Read) -> io::Result<Vec<u8>> {
-    let mut encoded = ZlibEncoder::new(file, Compression::Fast);
+fn encode_file(file: &mut dyn io::Read) -> io::Result<Vec<u8>> {
+    let mut encoded = ZlibEncoder::new(file, Compression::fast());
     let mut buffer = Vec::new();
     encoded.read_to_end(&mut buffer)?;
-    Ok(buffer);
+    return Ok(buffer);
 }
 
 // fn ls(dir_path: String) {
